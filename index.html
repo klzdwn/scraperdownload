@@ -55,8 +55,8 @@
   </div>
 
   <script>
-    // URL Backend Vercel Kamu (atau biarkan '/api/download' jika dalam 1 project domain)
-    const BACKEND_API = '/api/download'; 
+    // Mengarah langsung ke backend Vercel kamu
+    const BACKEND_API = 'https://scrapperdownload.vercel.app/api/download';
 
     const form = document.getElementById('downloadForm');
     const urlInput = document.getElementById('mediaUrl');
@@ -91,4 +91,70 @@
         // Ambil Gambar Thumbnail secara fleksibel
         let thumb = resData.thumbnail || resData.cover || resData.image || resData.avatar;
         if (Array.isArray(thumb)) thumb = thumb[0];
-        document.getElementById('resThumb').src = thumb || '
+        document.getElementById('resThumb').src = thumb || 'https://via.placeholder.com/300';
+
+        // Ambil Judul secara fleksibel
+        const title = resData.title || resData.desc || resData.description || resData.caption || 'Media Downloader';
+        document.getElementById('resTitle').innerText = title;
+
+        const linksContainer = document.getElementById('downloadLinks');
+        linksContainer.innerHTML = '';
+
+        // Kumpulkan semua link download yang valid dari objek respons
+        let downloadLinks = [];
+
+        function extractUrls(obj) {
+          if (!obj || typeof obj !== 'object') return;
+          for (const key in obj) {
+            const val = obj[key];
+            if (typeof val === 'string' && val.startsWith('http') && (val.includes('.mp4') || val.includes('.jpg') || val.includes('download') || val.includes('dl') || key.toLowerCase().includes('url') || key.toLowerCase().includes('video'))) {
+              downloadLinks.push({ label: key, url: val });
+            } else if (typeof val === 'object' && val !== null) {
+              extractUrls(val);
+            }
+          }
+        }
+
+        if (resData.url) downloadLinks.push({ label: 'Video HD', url: resData.url });
+        if (resData.urls && Array.isArray(resData.urls)) {
+          resData.urls.forEach((item, i) => {
+            const u = typeof item === 'string' ? item : (item.url || item.link);
+            const q = item.quality || item.type || `Opsi ${i + 1}`;
+            if (u) downloadLinks.push({ label: q, url: u });
+          });
+        }
+
+        if (downloadLinks.length === 0) {
+          extractUrls(resData);
+        }
+
+        // Hapus duplikat URL
+        downloadLinks = [...new Map(downloadLinks.map(item => [item.url, item])).values()];
+
+        if (downloadLinks.length > 0) {
+          downloadLinks.forEach((item) => {
+            const a = document.createElement('a');
+            a.href = item.url;
+            a.target = '_blank';
+            a.className = 'block text-center py-2 px-4 saweria-btn text-xs font-bold';
+            a.innerText = `⬇️ Download (${item.label.toUpperCase()})`;
+            linksContainer.appendChild(a);
+          });
+        }
+
+        if (linksContainer.children.length === 0) {
+          throw new Error("Data berhasil ditarik, tetapi format link video tidak ditemukan dalam respons.");
+        }
+
+        resultDiv.classList.remove('hidden');
+      } catch (err) {
+        console.error(err);
+        errorDiv.innerText = err.message || 'Terjadi kesalahan sistem.';
+        errorDiv.classList.remove('hidden');
+      } finally {
+        loading.classList.add('hidden');
+      }
+    });
+  </script>
+</body>
+</html>
