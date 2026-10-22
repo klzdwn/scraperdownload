@@ -46,3 +46,104 @@
     <!-- Result Box -->
     <div id="result" class="hidden mt-6 p-4 border-2 border-black rounded-2xl bg-amber-50 text-left space-y-3">
       <img id="resThumb" class="w-full h-40 object-cover rounded-xl border-2 border-black" src="" alt="Thumbnail">
+      <h2 id="resTitle" class="font-bold text-gray-800 text-sm line-clamp-2"></h2>
+      
+      <div id="downloadLinks" class="space-y-2 pt-2">
+        <!-- Direct download links generated here -->
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const BACKEND_API = '/api/download';
+
+    const form = document.getElementById('downloadForm');
+    const urlInput = document.getElementById('mediaUrl');
+    const loading = document.getElementById('loading');
+    const errorDiv = document.getElementById('error');
+    const resultDiv = document.getElementById('result');
+
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const url = urlInput.value.trim();
+
+      loading.classList.remove('hidden');
+      errorDiv.classList.add('hidden');
+      resultDiv.classList.add('hidden');
+
+      try {
+        const response = await fetch(BACKEND_API, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ url })
+        });
+
+        const data = await response.json();
+
+        if (!response.ok || !data.success) {
+          throw new Error(data.message || 'Gagal mengambil data media.');
+        }
+
+        const resData = data.result || {};
+        
+        // Ambil Thumbnail
+        let thumb = resData.thumbnail || resData.cover || resData.image || resData.avatar;
+        if (Array.isArray(thumb)) thumb = thumb[0];
+        document.getElementById('resThumb').src = thumb || 'https://via.placeholder.com/300';
+
+        // Ambil Judul
+        const title = resData.title || resData.desc || resData.description || resData.caption || 'Media Downloader';
+        document.getElementById('resTitle').innerText = title;
+
+        const linksContainer = document.getElementById('downloadLinks');
+        linksContainer.innerHTML = '';
+
+        // Penjelajah Universal: Ambil semua link yang berawalan http di dalam objek JSON
+        let validLinks = [];
+        
+        function scanAndCollect(obj) {
+          if (!obj) return;
+          if (typeof obj === 'string' && obj.startsWith('http') && !obj.includes('.jpg') && !obj.includes('.png')) {
+            validLinks.push({ label: 'Video Download', url: obj });
+          } else if (typeof obj === 'object') {
+            for (let k in obj) {
+              if (typeof obj[k] === 'string' && obj[k].startsWith('http') && (obj[k].includes('http') && !obj[k].endsWith('.jpg') && !obj[k].endsWith('.png'))) {
+                validLinks.push({ label: k.replace(/_/g, ' '), url: obj[k] });
+              } else {
+                scanAndCollect(obj[k]);
+              }
+            }
+          }
+        }
+
+        scanAndCollect(resData);
+
+        // Hapus duplikat URL
+        validLinks = [...new Map(validLinks.map(item => [item.url, item])).values()];
+
+        if (validLinks.length > 0) {
+          validLinks.forEach((item, index) => {
+            const a = document.createElement('a');
+            a.href = item.url;
+            a.target = '_blank';
+            a.className = 'block text-center py-2 px-4 saweria-btn text-xs font-bold truncate';
+            a.innerText = `⬇️ DOWNLOAD (${item.label.toUpperCase()})`;
+            linksContainer.appendChild(a);
+          });
+        }
+
+        if (linksContainer.children.length === 0) {
+          throw new Error("Link video tidak ditemukan di dalam respons data.");
+        }
+
+        resultDiv.classList.remove('hidden');
+      } catch (err) {
+        errorDiv.innerText = err.message || 'Terjadi kesalahan sistem.';
+        errorDiv.classList.remove('hidden');
+      } finally {
+        loading.classList.add('hidden');
+      }
+    });
+  </script>
+</body>
+</html>
