@@ -1,6 +1,7 @@
-import * as scrapperPkg from '@coflyn/scrapr';
+import * as scrapr from '@coflyn/scrapr';
 
 export default async function handler(req, res) {
+  // CORS Headers
   res.setHeader('Access-Control-Allow-Credentials', true);
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS,PATCH,DELETE,POST,PUT');
@@ -23,27 +24,28 @@ export default async function handler(req, res) {
       return res.status(400).json({ success: false, message: 'URL tidak boleh kosong!' });
     }
 
-    // Mencari properti apa pun di dalam modul yang berupa fungsi
-    const possibleKeys = Object.keys(scrapperPkg);
-    let scraperFunc = null;
+    let data = null;
+    const lowerUrl = url.toLowerCase();
 
-    for (const key of possibleKeys) {
-      if (typeof scrapperPkg[key] === 'function') {
-        scraperFunc = scrapperPkg[key];
-        break;
-      }
+    // Pilih fungsi scraper yang spesifik sesuai URL
+    if ((lowerUrl.includes('tiktok.com') || lowerUrl.includes('vt.tiktok')) && typeof scrapr.tiktok === 'function') {
+      data = await scrapr.tiktok(url);
+    } else if ((lowerUrl.includes('instagram.com') || lowerUrl.includes('instagr.am')) && typeof scrapr.instagram === 'function') {
+      data = await scrapr.instagram(url);
+    } else if ((lowerUrl.includes('youtube.com') || lowerUrl.includes('youtu.be')) && typeof scrapr.youtube === 'function') {
+      data = await scrapr.youtube(url);
+    } else if (lowerUrl.includes('facebook.com') && typeof scrapr.facebook === 'function') {
+      data = await scrapr.facebook(url);
+    } else if (lowerUrl.includes('twitter.com') || lowerUrl.includes('x.com') && typeof scrapr.twitter === 'function') {
+      data = await scrapr.twitter(url);
+    } else if (typeof scrapr.resolver === 'function') {
+      // Gunakan resolver otomatis untuk platform lain
+      data = await scrapr.resolver(url);
+    } else if (typeof scrapr.default === 'function') {
+      data = await scrapr.default(url);
+    } else {
+      throw new Error('Platform tidak didukung atau metode scraper tidak tersedia.');
     }
-
-    // Fallback jika ada default export
-    if (!scraperFunc && scrapperPkg.default && typeof scrapperPkg.default === 'function') {
-      scraperFunc = scrapperPkg.default;
-    }
-
-    if (typeof scraperFunc !== 'function') {
-      throw new Error(`Tidak ditemukan fungsi di dalam modul. Keys: ${possibleKeys.join(', ')}`);
-    }
-
-    const data = await scraperFunc(url);
 
     return res.status(200).json({
       success: true,
