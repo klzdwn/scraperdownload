@@ -1,7 +1,6 @@
-import { scrapr } from '@coflyn/scrapr';
+import scrapperPkg from '@coflyn/scrapr';
 
 export default async function handler(req, res) {
-  // CORS Headers
   res.setHeader('Access-Control-Allow-Credentials', true);
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS,PATCH,DELETE,POST,PUT');
@@ -24,11 +23,17 @@ export default async function handler(req, res) {
       return res.status(400).json({ success: false, message: 'URL tidak boleh kosong!' });
     }
 
-    if (typeof scrapr !== 'function') {
-      throw new Error('Fungsi scrapr tidak ditemukan dalam modul.');
+    // Mendeteksi berbagai kemungkinan bentuk ekspor dari library @coflyn/scrapr
+    const scraperFunc = typeof scrapperPkg === 'function' 
+      ? scrapperPkg 
+      : (scrapperPkg.default || scrapperPkg.scrapr || scrapperPkg.download);
+
+    if (typeof scraperFunc !== 'function') {
+      // Mengirim detail tipe data agar kita tahu bentuk aslinya jika masih error
+      throw new Error(`Struktur modul tidak dikenali (Tipe: ${typeof scrapperPkg})`);
     }
 
-    const data = await scrapr(url);
+    const data = await scraperFunc(url);
 
     return res.status(200).json({
       success: true,
