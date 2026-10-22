@@ -27,7 +27,7 @@
 
     <!-- Form Input -->
     <form id="downloadForm" class="space-y-4">
-      <input type="url" id="mediaUrl" required placeholder="https://www.tiktok.com/@user/video/..." 
+      <input type="url" id="mediaUrl" required placeholder="https://www.instagram.com/p/... atau TikTok..." 
              class="w-full px-4 py-3 rounded-xl border-2 border-black focus:outline-none focus:ring-2 focus:ring-amber-400 font-medium text-sm">
       
       <button type="submit" id="submitBtn" class="w-full py-3 saweria-btn text-base flex items-center justify-center gap-2">
@@ -49,10 +49,8 @@
       <!-- Video Preview Player -->
       <video id="resVideo" controls class="hidden w-full max-h-60 rounded-xl border-2 border-black bg-black object-contain"></video>
 
-      <!-- Container untuk Foto / Slide Preview -->
-      <div id="imageContainer" class="hidden space-y-2">
-        <!-- Gambar preview akan dimasukkan lewat JS secara dinamis -->
-      </div>
+      <!-- Container untuk Galeri Foto / Slide -->
+      <div id="imageContainer" class="hidden space-y-3 max-h-72 overflow-y-auto pr-1"></div>
       
       <!-- Title -->
       <h2 id="resTitle" class="font-bold text-gray-800 text-sm line-clamp-2"></h2>
@@ -92,14 +90,13 @@
         });
 
         const data = await response.json();
-
         if (!response.ok || !data.success) {
           throw new Error(data.message || 'Gagal mengambil data media.');
         }
 
         const resData = data.result || {};
         
-        // 1. Ambil Judul / Caption
+        // Ambil Judul/Caption
         const title = resData.title || resData.desc || resData.description || resData.caption || 'Media Downloader';
         document.getElementById('resTitle').innerText = title;
 
@@ -107,107 +104,86 @@
         linksContainer.innerHTML = '';
         imageContainer.innerHTML = '';
 
-        // 2. Klasifikasikan Media (Video vs Foto/Slide)
-        let mediaItems = [];
+        // Ekstraksi Foto / Slide / Carousel
+        let rawImages = resData.images || resData.photos || resData.slide || resData.image || resData.carousel;
+        let imageList = [];
+        if (rawImages) {
+          if (typeof rawImages === 'string') rawImages = [rawImages];
+          if (Array.isArray(rawImages)) {
+            imageList = rawImages.filter(item => typeof item === 'string' && item.startsWith('http'));
+          }
+        }
 
-        // Cek apakah ada format list urls/video dari scraper
+        // Ekstraksi Video & Resolusi
+        let videoList = [];
         if (resData.urls && Array.isArray(resData.urls)) {
           resData.urls.forEach((item, idx) => {
-            const fileUrl = typeof item === 'string' ? item : (item.url || item.link);
-            const qualityLabel = item.quality || item.type || `Resolusi ${idx + 1}`;
-            if (fileUrl) {
-              mediaItems.push({ type: 'video', label: qualityLabel, url: fileUrl });
+            const vUrl = typeof item === 'string' ? item : (item.url || item.link);
+            const qLabel = item.quality || item.resolution || item.type || `HD (${idx + 1})`;
+            if (vUrl && typeof vUrl === 'string' && !vUrl.endsWith('.jpg') && !vUrl.endsWith('.png')) {
+              videoList.push({ label: qLabel, url: vUrl });
             }
           });
         }
 
-        // Cek properti video tunggal
         if (resData.url || resData.video) {
-          const vUrl = resData.url || resData.video;
-          if (typeof vUrl === 'string') {
-            mediaItems.push({ type: 'video', label: 'HD / No Watermark', url: vUrl });
-          } else if (typeof vUrl === 'object') {
-            for (const key in vUrl) {
-              if (typeof vUrl[key] === 'string' && vUrl[key].startsWith('http')) {
-                mediaItems.push({ type: 'video', label: key.replace(/_/g, ' ').toUpperCase(), url: vUrl[key] });
+          const vObj = resData.url || resData.video;
+          if (typeof vObj === 'string' && !vObj.endsWith('.jpg')) {
+            videoList.push({ label: 'HD / No Watermark', url: vObj });
+          } else if (typeof vObj === 'object' && vObj !== null) {
+            for (const key in vObj) {
+              if (typeof vObj[key] === 'string' && vObj[key].startsWith('http') && !vObj[key].endsWith('.jpg')) {
+                let resName = key.replace(/_/g, ' ').toUpperCase();
+                if (resName.includes('720') || resName.includes('1080') || resName.includes('4K') || resName.includes('2K') || resName.includes('360') || resName.includes('480')) {
+                  resName = resName;
+                } else {
+                  resName = `KUALITAS ${resName}`;
+                }
+                videoList.push({ label: resName, url: vObj[key] });
               }
             }
           }
         }
 
-        // Cek apakah ada gambar / slide foto (Instagram Carousel / TikTok Slide)
-        let images = resData.images || resData.photos || resData.slide || resData.image;
-        if (images) {
-          if (typeof images === 'string') images = [images];
-          if (Array.isArray(images)) {
-            images.forEach((imgUrl, idx) => {
-              mediaItems.push({ type: 'image', label: `Foto / Slide ${idx + 1}`, url: imgUrl });
-            });
-          }
-        }
+        // Hapus duplikat
+        videoList = [...new Map(videoList.map(item => [item.url, item])).values()];
+        imageList = [...new Set(imageList)];
 
-        // Jika belum tertangkap, cari secara universal di dalam objek
-        if (mediaItems.length === 0) {
-          function deepScan(obj) {
-            if (!obj) return;
-            for (let k in obj) {
-              let val = obj[k];
-              if (typeof val === 'string' && val.startsWith('http') && !val.includes('.jpg') && !val.includes('.png')) {
-                mediaItems.push({ type: 'video', label: k.replace(/_/g, ' ').toUpperCase(), url: val });
-              } else if (typeof val === 'string' && val.startsWith('http') && (val.includes('.jpg') || val.includes('.png') || val.includes('.webp'))) {
-                mediaItems.push({ type: 'image', label: k.replace(/_/g, ' ').toUpperCase(), url: val });
-              } else if (typeof val === 'object') {
-                deepScan(val);
-              }
-            }
-          }
-          deepScan(resData);
-        }
+        // KONDISI 1: Jika post berisi FOTO / SLIDE (utamakan tampilkan gambar jika ada dan tidak ada video valid)
+        if (imageList.length > 0 && videoList.length === 0) {
+          imageList.forEach((imgUrl, idx) => {
+            const imgEl = document.createElement('img');
+            imgEl.src = imgUrl;
+            imgEl.className = 'w-full h-52 object-cover rounded-xl border-2 border-black';
+            imageContainer.appendChild(imgEl);
 
-        // Filter duplikat URL
-        mediaItems = [...new Map(mediaItems.map(item => [item.url, item])).values()];
-
-        const videoList = mediaItems.filter(i => i.type === 'video');
-        const imageList = mediaItems.filter(i => i.type === 'image');
-
-        // 3. Render Tampilan Preview & Tombol Download Berdasarkan Jenisnya
-        if (videoList.length > 0) {
-          // Tampilkan Video Player Preview
+            // Tombol download untuk tiap foto/slide
+            const a = document.createElement('a');
+            a.href = imgUrl;
+            a.target = '_blank';
+            a.download = '';
+            a.className = 'block text-center py-2.5 px-4 saweria-btn text-xs font-bold truncate mt-1';
+            a.innerText = `⬇️ DOWNLOAD FOTO / SLIDE ${idx + 1}`;
+            linksContainer.appendChild(a);
+          });
+          imageContainer.classList.remove('hidden');
+        } 
+        // KONDISI 2: Jika post berupa VIDEO / REELS
+        else if (videoList.length > 0) {
           resVideo.src = videoList[0].url;
           resVideo.classList.remove('hidden');
 
-          // Buat Tombol Download dengan Resolusi Spesifik
           videoList.forEach((item) => {
             const a = document.createElement('a');
             a.href = item.url;
             a.target = '_blank';
             a.download = '';
             a.className = 'block text-center py-2.5 px-4 saweria-btn text-xs font-bold truncate';
-            a.innerText = `⬇️ DOWNLOAD (${item.label})`;
-            linksContainer.appendChild(a);
-          });
-        } else if (imageList.length > 0) {
-          // Tampilkan Preview Foto / Slide langsung
-          imageList.forEach((img, idx) => {
-            const imgEl = document.createElement('img');
-            imgEl.src = img.url;
-            imgEl.className = 'w-full h-48 object-cover rounded-xl border-2 border-black mb-2';
-            imageContainer.appendChild(imgEl);
-          });
-          imageContainer.classList.remove('hidden');
-
-          // Buat Tombol Download Foto/Slide
-          imageList.forEach((img, idx) => {
-            const a = document.createElement('a');
-            a.href = img.url;
-            a.target = '_blank';
-            a.download = '';
-            a.className = 'block text-center py-2.5 px-4 saweria-btn text-xs font-bold truncate';
-            a.innerText = `⬇️ DOWNLOAD SLIDE / FOTO ${idx + 1}`;
+            a.innerText = `⬇️ DOWNLOAD (${item.label.toUpperCase()})`;
             linksContainer.appendChild(a);
           });
         } else {
-          throw new Error("Media tidak ditemukan atau format tautan tidak didukung.");
+          throw new Error("Media tidak ditemukan atau tipe postingan tidak didukung.");
         }
 
         resultDiv.classList.remove('hidden');
