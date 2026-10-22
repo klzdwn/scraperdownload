@@ -55,8 +55,8 @@
   </div>
 
   <script>
-    // Mengarah langsung ke backend Vercel kamu
-    const BACKEND_API = 'https://scrapperdownload.vercel.app/api/download';
+    // Gunakan jalur relatif karena frontend & backend berada di 1 project Vercel yang sama
+    const BACKEND_API = '/api/download';
 
     const form = document.getElementById('downloadForm');
     const urlInput = document.getElementById('mediaUrl');
@@ -80,7 +80,6 @@
         });
 
         const data = await response.json();
-        console.log("Response dari Backend:", data);
 
         if (!response.ok || !data.success) {
           throw new Error(data.message || 'Gagal mengambil data media.');
@@ -88,19 +87,19 @@
 
         const resData = data.result || {};
         
-        // Ambil Gambar Thumbnail secara fleksibel
+        // Ambil Thumbnail
         let thumb = resData.thumbnail || resData.cover || resData.image || resData.avatar;
         if (Array.isArray(thumb)) thumb = thumb[0];
         document.getElementById('resThumb').src = thumb || 'https://via.placeholder.com/300';
 
-        // Ambil Judul secara fleksibel
+        // Ambil Judul
         const title = resData.title || resData.desc || resData.description || resData.caption || 'Media Downloader';
         document.getElementById('resTitle').innerText = title;
 
         const linksContainer = document.getElementById('downloadLinks');
         linksContainer.innerHTML = '';
 
-        // Kumpulkan semua link download yang valid dari objek respons
+        // Ekstraksi Link Download Universal
         let downloadLinks = [];
 
         function extractUrls(obj) {
@@ -148,7 +147,6 @@
 
         resultDiv.classList.remove('hidden');
       } catch (err) {
-        console.error(err);
         errorDiv.innerText = err.message || 'Terjadi kesalahan sistem.';
         errorDiv.classList.remove('hidden');
       } finally {
