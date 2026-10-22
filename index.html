@@ -104,60 +104,61 @@
         linksContainer.innerHTML = '';
         imageContainer.innerHTML = '';
 
-        // Ekstraksi Foto / Slide / Carousel
-        let rawImages = resData.images || resData.photos || resData.slide || resData.image || resData.carousel;
-        let imageList = [];
-        if (rawImages) {
-          if (typeof rawImages === 'string') rawImages = [rawImages];
-          if (Array.isArray(rawImages)) {
-            imageList = rawImages.filter(item => typeof item === 'string' && item.startsWith('http'));
-          }
-        }
+        // Penjelajah Universal untuk mengumpulkan semua file gambar dan video dari respons server
+        let allImages = [];
+        let allVideos = [];
 
-        // Ekstraksi Video & Resolusi
-        let videoList = [];
-        if (resData.urls && Array.isArray(resData.urls)) {
-          resData.urls.forEach((item, idx) => {
-            const vUrl = typeof item === 'string' ? item : (item.url || item.link);
-            const qLabel = item.quality || item.resolution || item.type || `HD (${idx + 1})`;
-            if (vUrl && typeof vUrl === 'string' && !vUrl.endsWith('.jpg') && !vUrl.endsWith('.png')) {
-              videoList.push({ label: qLabel, url: vUrl });
+        function scanDeep(obj) {
+          if (!obj) return;
+          if (typeof obj === 'string' && obj.startsWith('http')) {
+            const lower = obj.toLowerCase();
+            // Deteksi apakah link gambar/foto
+            if (lower.includes('.jpg') || lower.includes('.jpeg') || lower.includes('.png') || lower.includes('.webp') || lower.includes('fbcdn') || lower.includes('cdninstagram')) {
+              // Abaikan jika ini murni URL avatar kecil/thumbnail profil
+              if (!lower.includes('avatar') && !lower.includes('profile')) {
+                allImages.push(obj);
+              }
+            } else if (lower.includes('.mp4') || lower.includes('video') || lower.includes('dl') || lower.includes('stream')) {
+              allVideos.push({ label: 'HD / No Watermark', url: obj });
             }
-          });
-        }
-
-        if (resData.url || resData.video) {
-          const vObj = resData.url || resData.video;
-          if (typeof vObj === 'string' && !vObj.endsWith('.jpg')) {
-            videoList.push({ label: 'HD / No Watermark', url: vObj });
-          } else if (typeof vObj === 'object' && vObj !== null) {
-            for (const key in vObj) {
-              if (typeof vObj[key] === 'string' && vObj[key].startsWith('http') && !vObj[key].endsWith('.jpg')) {
-                let resName = key.replace(/_/g, ' ').toUpperCase();
-                if (resName.includes('720') || resName.includes('1080') || resName.includes('4K') || resName.includes('2K') || resName.includes('360') || resName.includes('480')) {
-                  resName = resName;
-                } else {
-                  resName = `KUALITAS ${resName}`;
+          } else if (Array.isArray(obj)) {
+            obj.forEach(item => scanDeep(item));
+          } else if (typeof obj === 'object') {
+            for (const key in obj) {
+              const val = obj[key];
+              const kLower = key.toLowerCase();
+              
+              if (typeof val === 'string' && val.startsWith('http')) {
+                if (kLower.includes('thumb') || kLower.includes('cover') || kLower.includes('avatar')) {
+                  // Lewati thumbnail kecil
+                  continue;
                 }
-                videoList.push({ label: resName, url: vObj[key] });
+                if (kLower.includes('image') || kLower.includes('photo') || kLower.includes('slide') || val.includes('.jpg') || val.includes('.png')) {
+                  allImages.push(val);
+                } else {
+                  allVideos.push({ label: key.replace(/_/g, ' ').toUpperCase(), url: val });
+                }
+              } else {
+                scanDeep(val);
               }
             }
           }
         }
 
-        // Hapus duplikat
-        videoList = [...new Map(videoList.map(item => [item.url, item])).values()];
-        imageList = [...new Set(imageList)];
+        scanDeep(resData);
 
-        // KONDISI 1: Jika post berisi FOTO / SLIDE (utamakan tampilkan gambar jika ada dan tidak ada video valid)
-        if (imageList.length > 0 && videoList.length === 0) {
-          imageList.forEach((imgUrl, idx) => {
+        // Hapus duplikat
+        allImages = [...new Set(allImages)];
+        allVideos = [...new Map(allVideos.map(item => [item.url, item])).values()];
+
+        // KONDISI 1: Jika ditemukan gambar/foto (dan jumlahnya dominan atau tidak ada video valid)
+        if (allImages.length > 0 && allVideos.length === 0) {
+          allImages.forEach((imgUrl, idx) => {
             const imgEl = document.createElement('img');
             imgEl.src = imgUrl;
             imgEl.className = 'w-full h-52 object-cover rounded-xl border-2 border-black';
             imageContainer.appendChild(imgEl);
 
-            // Tombol download untuk tiap foto/slide
             const a = document.createElement('a');
             a.href = imgUrl;
             a.target = '_blank';
@@ -168,18 +169,24 @@
           });
           imageContainer.classList.remove('hidden');
         } 
-        // KONDISI 2: Jika post berupa VIDEO / REELS
-        else if (videoList.length > 0) {
-          resVideo.src = videoList[0].url;
+        // KONDISI 2: Jika berupa VIDEO / REELS
+        else if (allVideos.length > 0) {
+          resVideo.src = allVideos[0].url;
           resVideo.classList.remove('hidden');
 
-          videoList.forEach((item) => {
+          allVideos.forEach((item, idx) => {
             const a = document.createElement('a');
             a.href = item.url;
             a.target = '_blank';
             a.download = '';
             a.className = 'block text-center py-2.5 px-4 saweria-btn text-xs font-bold truncate';
-            a.innerText = `⬇️ DOWNLOAD (${item.label.toUpperCase()})`;
+            
+            let labelRes = item.label;
+            if (labelRes.includes('URL') || labelRes.length > 15) {
+              labelRes = `RESOLUSI ${idx + 1} (HD)`;
+            }
+
+            a.innerText = `⬇️ DOWNLOAD (${labelRes})`;
             linksContainer.appendChild(a);
           });
         } else {
