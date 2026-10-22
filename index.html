@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Downria - Downloader Keren</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    body { font-family: 'Plus Jakarta Sans', sans-serif; background-color: #f7f9fc; }
+    .saweria-card { background: #ffffff; border: 2px solid #111; border-radius: 24px; box-shadow: 5px 5px 0px #111; }
+    .saweria-btn { background: #fa9d00; color: #111; font-weight: 700; border: 2px solid #111; border-radius: 16px; box-shadow: 3px 3px 0px #111; transition: all 0.15s ease; }
+    .saweria-btn:hover { transform: translate(-2px, -2px); box-shadow: 5px 5px 0px #111; }
+    .saweria-btn:active { transform: translate(1px, 1px); box-shadow: 2px 2px 0px #111; }
+  </style>
+</head>
+<body class="min-h-screen flex flex-col items-center justify-center p-4">
+
+  <div class="max-w-md w-full saweria-card p-6 text-center">
+    <!-- Header Logo -->
+    <div class="flex items-center justify-center gap-2 mb-4">
+      <div class="w-10 h-10 bg-amber-400 rounded-full border-2 border-black flex items-center justify-center font-extrabold text-xl">D</div>
+      <h1 class="text-2xl font-black text-gray-900">Downria</h1>
+    </div>
+
+    <p class="text-sm font-semibold text-gray-600 mb-6">Paste link video/media kamu di bawah ini!</p>
+
+    <!-- Form Input -->
+    <form id="downloadForm" class="space-y-4">
+      <input type="url" id="mediaUrl" required placeholder="https://www.tiktok.com/@user/video/..." 
+             class="w-full px-4 py-3 rounded-xl border-2 border-black focus:outline-none focus:ring-2 focus:ring-amber-400 font-medium text-sm">
+      
+      <button type="submit" id="submitBtn" class="w-full py-3 saweria-btn text-base flex items-center justify-center gap-2">
+        <span>Unduh Sekarang</span>
+      </button>
+    </form>
+
+    <!-- Loading Indicator -->
+    <div id="loading" class="hidden mt-6 text-amber-600 font-bold animate-pulse text-sm">
+      ⏳ Sedang mengekstrak media lewat Scraper...
+    </div>
+
+    <!-- Error Message -->
+    <div id="error" class="hidden mt-4 p-3 bg-red-100 border-2 border-red-500 rounded-xl text-red-700 text-xs font-bold"></div>
+
+    <!-- Result Box -->
+    <div id="result" class="hidden mt-6 p-4 border-2 border-black rounded-2xl bg-amber-50 text-left space-y-3">
+      <img id="resThumb" class="w-full h-40 object-cover rounded-xl border-2 border-black" src="" alt="Thumbnail">
+      <h2 id="resTitle" class="font-bold text-gray-800 text-sm line-clamp-2"></h2>
+      
+      <div id="downloadLinks" class="space-y-2 pt-2">
+        <!-- Direct download links generated here -->
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // MASUKKAN URL BACKEND/VERCEL KAMU DI SINI
+    const BACKEND_API = '/api/download'; 
+
+    const form = document.getElementById('downloadForm');
+    const urlInput = document.getElementById('mediaUrl');
+    const loading = document.getElementById('loading');
+    const errorDiv = document.getElementById('error');
+    const resultDiv = document.getElementById('result');
+
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const url = urlInput.value.trim();
+
+      loading.classList.remove('hidden');
+      errorDiv.classList.add('hidden');
+      resultDiv.classList.add('hidden');
+
+      try {
+        const response = await fetch(BACKEND_API, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ url })
+        });
+
+        const data = await response.json();
+
+        if (!response.ok || !data.success) {
+          throw new Error(data.message || 'Gagal mengambil data media.');
+        }
+
+        // Render Data Hasil @coflyn/scrapr
+        document.getElementById('resThumb').src = data.result.thumbnail || 'https://via.placeholder.com/300';
+        document.getElementById('resTitle').innerText = data.result.title || 'Media Downloader';
+
+        const linksContainer = document.getElementById('downloadLinks');
+        linksContainer.innerHTML = '';
+
+        if (data.result.urls && data.result.urls.length > 0) {
+          data.result.urls.forEach((item, index) => {
+            const a = document.createElement('a');
+            a.href = item.url || item;
+            a.target = '_blank';
+            a.className = 'block text-center py-2 px-4 saweria-btn text-xs';
+            a.innerText = `Download Option ${index + 1} (${item.quality || 'HD'})`;
+            linksContainer.appendChild(a);
+          });
+        }
+
+        resultDiv.classList.remove('hidden');
+      } catch (err) {
+        errorDiv.innerText = err.message || 'Terjadi kesalahan sistem.';
+        errorDiv.classList.remove('hidden');
+      } finally {
+        loading.classList.add('hidden');
+      }
+    });
+  </script>
+</body>
+</html>
