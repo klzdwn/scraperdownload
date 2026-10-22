@@ -55,8 +55,7 @@
   </div>
 
   <script>
-    // MASUKKAN URL VERCEL KAMU DI SINI JIKA DARI GITHUB PAGES
-    // Contoh: const BACKEND_API = 'https://scrapperdownload.vercel.app/api/download';
+    // URL Backend Vercel Kamu (atau biarkan '/api/download' jika dalam 1 project domain)
     const BACKEND_API = '/api/download'; 
 
     const form = document.getElementById('downloadForm');
@@ -89,63 +88,7 @@
 
         const resData = data.result || {};
         
-        // Ambil Gambar
-        let thumb = resData.thumbnail || resData.cover || resData.image;
+        // Ambil Gambar Thumbnail secara fleksibel
+        let thumb = resData.thumbnail || resData.cover || resData.image || resData.avatar;
         if (Array.isArray(thumb)) thumb = thumb[0];
-        document.getElementById('resThumb').src = thumb || 'https://via.placeholder.com/300';
-
-        // Ambil Judul
-        const title = resData.title || resData.desc || resData.caption || 'Media Downloader';
-        document.getElementById('resTitle').innerText = title;
-
-        const linksContainer = document.getElementById('downloadLinks');
-        linksContainer.innerHTML = '';
-
-        // Ekstraksi Link Download
-        let urls = [];
-        if (resData.url) urls.push(resData.url);
-        if (resData.urls) urls = urls.concat(resData.urls);
-        if (resData.video) urls = urls.concat(resData.video);
-        if (resData.download) urls = urls.concat(resData.download);
-
-        // Jika berbentuk objek (misal: { no_watermark: "http...", watermark: "http..." })
-        if (urls.length === 0 && typeof resData === 'object') {
-          for (const k in resData) {
-            if (typeof resData[k] === 'string' && resData[k].startsWith('http')) {
-              urls.push({ label: k, url: resData[k] });
-            }
-          }
-        }
-
-        if (urls.length > 0) {
-          urls.forEach((item, index) => {
-            const linkUrl = typeof item === 'string' ? item : (item.url || item.link);
-            const label = typeof item === 'object' && item.label ? item.label : `Download HD (${index + 1})`;
-
-            if (linkUrl && typeof linkUrl === 'string') {
-              const a = document.createElement('a');
-              a.href = linkUrl;
-              a.target = '_blank';
-              a.className = 'block text-center py-2 px-4 saweria-btn text-xs font-bold';
-              a.innerText = `⬇️ ${label.toUpperCase()}`;
-              linksContainer.appendChild(a);
-            }
-          });
-        }
-
-        if (linksContainer.children.length === 0) {
-          throw new Error("Objek data diterima, tetapi URL download tidak ditemukan dalam struktur respons.");
-        }
-
-        resultDiv.classList.remove('hidden');
-      } catch (err) {
-        console.error(err);
-        errorDiv.innerText = err.message || 'Terjadi kesalahan sistem.';
-        errorDiv.classList.remove('hidden');
-      } finally {
-        loading.classList.add('hidden');
-      }
-    });
-  </script>
-</body>
-</html>
+        document.getElementById('resThumb').src = thumb || '
