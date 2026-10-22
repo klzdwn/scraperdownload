@@ -1,7 +1,10 @@
-const { scrapr } = require('@coflyn/scrapr');
+const scraprModule = require('@coflyn/scrapr');
+
+// Mengantisipasi berbagai cara library diekspor (Default Export, Named Export, atau Direct Function)
+const scrapr = scraprModule.scrapr || scraprModule.default || (typeof scraprModule === 'function' ? scraprModule : null);
 
 module.exports = async (req, res) => {
-  // CORS Header biar frontend bisa akses
+  // CORS Headers agar frontend (Vercel / GitHub Pages) bisa mengakses API
   res.setHeader('Access-Control-Allow-Credentials', true);
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS,PATCH,DELETE,POST,PUT');
@@ -10,6 +13,7 @@ module.exports = async (req, res) => {
     'X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version'
   );
 
+  // Jalur khusus untuk preflight request dari browser
   if (req.method === 'OPTIONS') {
     res.status(200).end();
     return;
@@ -25,7 +29,11 @@ module.exports = async (req, res) => {
       return res.status(400).json({ success: false, message: 'URL tidak boleh kosong!' });
     }
 
-    // Panggil pustaka @coflyn/scrapr
+    if (typeof scrapr !== 'function') {
+      throw new Error('Gagal memuat fungsi scraper dari @coflyn/scrapr.');
+    }
+
+    // Panggil fungsi scraper
     const data = await scrapr(url);
 
     return res.status(200).json({
