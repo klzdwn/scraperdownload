@@ -1,4 +1,4 @@
-import scrapperPkg from '@coflyn/scrapr';
+import * as scrapperPkg from '@coflyn/scrapr';
 
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Credentials', true);
@@ -23,14 +23,24 @@ export default async function handler(req, res) {
       return res.status(400).json({ success: false, message: 'URL tidak boleh kosong!' });
     }
 
-    // Mendeteksi berbagai kemungkinan bentuk ekspor dari library @coflyn/scrapr
-    const scraperFunc = typeof scrapperPkg === 'function' 
-      ? scrapperPkg 
-      : (scrapperPkg.default || scrapperPkg.scrapr || scrapperPkg.download);
+    // Mencari properti apa pun di dalam modul yang berupa fungsi
+    const possibleKeys = Object.keys(scrapperPkg);
+    let scraperFunc = null;
+
+    for (const key of possibleKeys) {
+      if (typeof scrapperPkg[key] === 'function') {
+        scraperFunc = scrapperPkg[key];
+        break;
+      }
+    }
+
+    // Fallback jika ada default export
+    if (!scraperFunc && scrapperPkg.default && typeof scrapperPkg.default === 'function') {
+      scraperFunc = scrapperPkg.default;
+    }
 
     if (typeof scraperFunc !== 'function') {
-      // Mengirim detail tipe data agar kita tahu bentuk aslinya jika masih error
-      throw new Error(`Struktur modul tidak dikenali (Tipe: ${typeof scrapperPkg})`);
+      throw new Error(`Tidak ditemukan fungsi di dalam modul. Keys: ${possibleKeys.join(', ')}`);
     }
 
     const data = await scraperFunc(url);
