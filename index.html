@@ -49,8 +49,10 @@
       <!-- Video Preview Player -->
       <video id="resVideo" controls class="hidden w-full max-h-60 rounded-xl border-2 border-black bg-black object-contain"></video>
 
-      <!-- Thumbnail Preview Image -->
-      <img id="resThumb" class="hidden w-full h-44 object-cover rounded-xl border-2 border-black" src="" alt="Thumbnail">
+      <!-- Container untuk Foto / Slide Preview -->
+      <div id="imageContainer" class="hidden space-y-2">
+        <!-- Gambar preview akan dimasukkan lewat JS secara dinamis -->
+      </div>
       
       <!-- Title -->
       <h2 id="resTitle" class="font-bold text-gray-800 text-sm line-clamp-2"></h2>
@@ -69,7 +71,7 @@
     const errorDiv = document.getElementById('error');
     const resultDiv = document.getElementById('result');
     const resVideo = document.getElementById('resVideo');
-    const resThumb = document.getElementById('resThumb');
+    const imageContainer = document.getElementById('imageContainer');
 
     form.addEventListener('submit', async (e) => {
       e.preventDefault();
@@ -79,7 +81,7 @@
       errorDiv.classList.add('hidden');
       resultDiv.classList.add('hidden');
       resVideo.classList.add('hidden');
-      resThumb.classList.add('hidden');
+      imageContainer.classList.add('hidden');
       resVideo.pause();
 
       try {
@@ -97,84 +99,115 @@
 
         const resData = data.result || {};
         
-        // 1. Ambil Judul
+        // 1. Ambil Judul / Caption
         const title = resData.title || resData.desc || resData.description || resData.caption || 'Media Downloader';
         document.getElementById('resTitle').innerText = title;
 
-        // 2. Kumpulkan & Pisahkan URL (Video vs Thumbnail)
-        let videoUrls = [];
-        let imageUrls = [];
-
-        function findMedia(obj, parentKey = '') {
-          if (!obj) return;
-          if (typeof obj === 'string' && obj.startsWith('http')) {
-            const isImgKey = parentKey.includes('thumb') || parentKey.includes('cover') || parentKey.includes('avatar') || parentKey.includes('image');
-            if (isImgKey || obj.includes('.jpg') || obj.includes('.jpeg') || obj.includes('.png') || obj.includes('.webp')) {
-              imageUrls.push(obj);
-            } else {
-              videoUrls.push({ key: parentKey, url: obj });
-            }
-          } else if (typeof obj === 'object') {
-            for (let k in obj) {
-              findMedia(obj[k], k.toLowerCase());
-            }
-          }
-        }
-
-        findMedia(resData);
-
-        // Hapus duplikat
-        videoUrls = [...new Map(videoUrls.map(item => [item.url, item])).values()];
-        imageUrls = [...new Set(imageUrls)];
-
-        // 3. Tampilkan Preview (Video atau Gambar)
-        let mainVideoUrl = videoUrls.length > 0 ? videoUrls[0].url : null;
-        let mainThumbUrl = imageUrls.length > 0 ? imageUrls[0] : (resData.thumbnail || resData.cover);
-        if (Array.isArray(mainThumbUrl)) mainThumbUrl = mainThumbUrl[0];
-
-        if (mainVideoUrl) {
-          resVideo.src = mainVideoUrl;
-          if (mainThumbUrl && typeof mainThumbUrl === 'string') {
-            resVideo.poster = mainThumbUrl;
-          }
-          resVideo.classList.remove('hidden');
-        } else if (mainThumbUrl && typeof mainThumbUrl === 'string') {
-          resThumb.src = mainThumbUrl;
-          resThumb.classList.remove('hidden');
-        }
-
-        // 4. Buat Tombol Download Rapi (Khusus Media Video/Audio/Download)
         const linksContainer = document.getElementById('downloadLinks');
         linksContainer.innerHTML = '';
+        imageContainer.innerHTML = '';
 
-        if (videoUrls.length > 0) {
-          videoUrls.forEach((item, index) => {
-            let label = item.key.replace(/_/g, ' ').toUpperCase();
-            if (label.includes('URL') || label.length > 18 || !label) {
-              label = `NO WATERMARK (HD ${index + 1})`;
+        // 2. Klasifikasikan Media (Video vs Foto/Slide)
+        let mediaItems = [];
+
+        // Cek apakah ada format list urls/video dari scraper
+        if (resData.urls && Array.isArray(resData.urls)) {
+          resData.urls.forEach((item, idx) => {
+            const fileUrl = typeof item === 'string' ? item : (item.url || item.link);
+            const qualityLabel = item.quality || item.type || `Resolusi ${idx + 1}`;
+            if (fileUrl) {
+              mediaItems.push({ type: 'video', label: qualityLabel, url: fileUrl });
             }
+          });
+        }
 
+        // Cek properti video tunggal
+        if (resData.url || resData.video) {
+          const vUrl = resData.url || resData.video;
+          if (typeof vUrl === 'string') {
+            mediaItems.push({ type: 'video', label: 'HD / No Watermark', url: vUrl });
+          } else if (typeof vUrl === 'object') {
+            for (const key in vUrl) {
+              if (typeof vUrl[key] === 'string' && vUrl[key].startsWith('http')) {
+                mediaItems.push({ type: 'video', label: key.replace(/_/g, ' ').toUpperCase(), url: vUrl[key] });
+              }
+            }
+          }
+        }
+
+        // Cek apakah ada gambar / slide foto (Instagram Carousel / TikTok Slide)
+        let images = resData.images || resData.photos || resData.slide || resData.image;
+        if (images) {
+          if (typeof images === 'string') images = [images];
+          if (Array.isArray(images)) {
+            images.forEach((imgUrl, idx) => {
+              mediaItems.push({ type: 'image', label: `Foto / Slide ${idx + 1}`, url: imgUrl });
+            });
+          }
+        }
+
+        // Jika belum tertangkap, cari secara universal di dalam objek
+        if (mediaItems.length === 0) {
+          function deepScan(obj) {
+            if (!obj) return;
+            for (let k in obj) {
+              let val = obj[k];
+              if (typeof val === 'string' && val.startsWith('http') && !val.includes('.jpg') && !val.includes('.png')) {
+                mediaItems.push({ type: 'video', label: k.replace(/_/g, ' ').toUpperCase(), url: val });
+              } else if (typeof val === 'string' && val.startsWith('http') && (val.includes('.jpg') || val.includes('.png') || val.includes('.webp'))) {
+                mediaItems.push({ type: 'image', label: k.replace(/_/g, ' ').toUpperCase(), url: val });
+              } else if (typeof val === 'object') {
+                deepScan(val);
+              }
+            }
+          }
+          deepScan(resData);
+        }
+
+        // Filter duplikat URL
+        mediaItems = [...new Map(mediaItems.map(item => [item.url, item])).values()];
+
+        const videoList = mediaItems.filter(i => i.type === 'video');
+        const imageList = mediaItems.filter(i => i.type === 'image');
+
+        // 3. Render Tampilan Preview & Tombol Download Berdasarkan Jenisnya
+        if (videoList.length > 0) {
+          // Tampilkan Video Player Preview
+          resVideo.src = videoList[0].url;
+          resVideo.classList.remove('hidden');
+
+          // Buat Tombol Download dengan Resolusi Spesifik
+          videoList.forEach((item) => {
             const a = document.createElement('a');
             a.href = item.url;
             a.target = '_blank';
             a.download = '';
             a.className = 'block text-center py-2.5 px-4 saweria-btn text-xs font-bold truncate';
-            a.innerText = `⬇️ DOWNLOAD ${label}`;
+            a.innerText = `⬇️ DOWNLOAD (${item.label})`;
             linksContainer.appendChild(a);
           });
-        } else if (imageUrls.length > 0) {
-          // Jika kontentnya berupa foto/slide
-          imageUrls.forEach((imgUrl, index) => {
+        } else if (imageList.length > 0) {
+          // Tampilkan Preview Foto / Slide langsung
+          imageList.forEach((img, idx) => {
+            const imgEl = document.createElement('img');
+            imgEl.src = img.url;
+            imgEl.className = 'w-full h-48 object-cover rounded-xl border-2 border-black mb-2';
+            imageContainer.appendChild(imgEl);
+          });
+          imageContainer.classList.remove('hidden');
+
+          // Buat Tombol Download Foto/Slide
+          imageList.forEach((img, idx) => {
             const a = document.createElement('a');
-            a.href = imgUrl;
+            a.href = img.url;
             a.target = '_blank';
             a.download = '';
             a.className = 'block text-center py-2.5 px-4 saweria-btn text-xs font-bold truncate';
-            a.innerText = `⬇️ DOWNLOAD GAMBAR (${index + 1})`;
+            a.innerText = `⬇️ DOWNLOAD SLIDE / FOTO ${idx + 1}`;
             linksContainer.appendChild(a);
           });
         } else {
-          throw new Error("Format media tidak berhasil diekstrak.");
+          throw new Error("Media tidak ditemukan atau format tautan tidak didukung.");
         }
 
         resultDiv.classList.remove('hidden');
