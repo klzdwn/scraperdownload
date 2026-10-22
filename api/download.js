@@ -24,33 +24,55 @@ export default async function handler(req, res) {
       return res.status(400).json({ success: false, message: 'URL tidak boleh kosong!' });
     }
 
-    let data = null;
     const lowerUrl = url.toLowerCase();
+    let targetModule = null;
 
-    // Pilih fungsi scraper yang spesifik sesuai URL
-    if ((lowerUrl.includes('tiktok.com') || lowerUrl.includes('vt.tiktok')) && typeof scrapr.tiktok === 'function') {
-      data = await scrapr.tiktok(url);
-    } else if ((lowerUrl.includes('instagram.com') || lowerUrl.includes('instagr.am')) && typeof scrapr.instagram === 'function') {
-      data = await scrapr.instagram(url);
-    } else if ((lowerUrl.includes('youtube.com') || lowerUrl.includes('youtu.be')) && typeof scrapr.youtube === 'function') {
-      data = await scrapr.youtube(url);
-    } else if (lowerUrl.includes('facebook.com') && typeof scrapr.facebook === 'function') {
-      data = await scrapr.facebook(url);
-    } else if (lowerUrl.includes('twitter.com') || lowerUrl.includes('x.com') && typeof scrapr.twitter === 'function') {
-      data = await scrapr.twitter(url);
-    } else if (typeof scrapr.resolver === 'function') {
-      // Gunakan resolver otomatis untuk platform lain
-      data = await scrapr.resolver(url);
-    } else if (typeof scrapr.default === 'function') {
-      data = await scrapr.default(url);
+    // 1. Tentukan modul target berdasarkan URL
+    if (lowerUrl.includes('tiktok') || lowerUrl.includes('vt.tiktok')) {
+      targetModule = scrapr.tiktok;
+    } else if (lowerUrl.includes('instagram') || lowerUrl.includes('instagr.am')) {
+      targetModule = scrapr.instagram;
+    } else if (lowerUrl.includes('youtube') || lowerUrl.includes('youtu.be')) {
+      targetModule = scrapr.youtube;
+    } else if (lowerUrl.includes('facebook') || lowerUrl.includes('fb.watch')) {
+      targetModule = scrapr.facebook;
+    } else if (lowerUrl.includes('twitter') || lowerUrl.includes('x.com')) {
+      targetModule = scrapr.twitter;
     } else {
-      throw new Error('Platform tidak didukung atau metode scraper tidak tersedia.');
+      targetModule = scrapr.resolver || scrapr.default;
     }
+
+    // 2. Cari fungsi eksekusi dari targetModule
+    let fetchFn = null;
+
+    if (typeof targetModule === 'function') {
+      fetchFn = targetModule;
+    } else if (targetModule && typeof targetModule === 'object') {
+      // Cari fungsi di dalam objek modul (misal: targetModule.download, targetModule.default, dll)
+      fetchFn = targetModule.download || targetModule.default || targetModule.scrape || targetModule.getVideo;
+      if (!fetchFn) {
+        // Ambil fungsi pertama yang ditemukan di dalam objek tersebut
+        for (const key of Object.keys(targetModule)) {
+          if (typeof targetModule[key] === 'function') {
+            fetchFn = targetModule[key];
+            break;
+          }
+        }
+      }
+    }
+
+    if (typeof fetchFn !== 'function') {
+      throw new Error(`Gagal menemukan fungsi ekstraksi untuk URL ini. Structural Type: ${typeof targetModule}`);
+    }
+
+    // 3. Jalankan fungsi scraper
+    const data = await fetchFn(url);
 
     return res.status(200).json({
       success: true,
       result: data
     });
+
   } catch (error) {
     return res.status(500).json({
       success: false,
