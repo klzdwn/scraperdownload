@@ -41,11 +41,111 @@
     </div>
 
     <!-- Error Message -->
-    <div id="error" class="hidden mt-4 p-3 bg-red-100 border-2 border-red-500 rounded-xl text-red-700 text-xs font-bold"></div>
+    <div id="error" class="hidden mt-4 p-3 bg-red-100 border-2 border-red-500 rounded-xl text-red-700 text-xs font-bold break-all"></div>
 
     <!-- Result Box -->
     <div id="result" class="hidden mt-6 p-4 border-2 border-black rounded-2xl bg-amber-50 text-left space-y-3">
       <img id="resThumb" class="w-full h-40 object-cover rounded-xl border-2 border-black" src="" alt="Thumbnail">
       <h2 id="resTitle" class="font-bold text-gray-800 text-sm line-clamp-2"></h2>
       
-      <div id="downloadLinks
+      <div id="downloadLinks" class="space-y-2 pt-2">
+        <!-- Direct download links generated here -->
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // MASUKKAN URL VERCEL KAMU DI SINI JIKA DARI GITHUB PAGES
+    // Contoh: const BACKEND_API = 'https://scrapperdownload.vercel.app/api/download';
+    const BACKEND_API = '/api/download'; 
+
+    const form = document.getElementById('downloadForm');
+    const urlInput = document.getElementById('mediaUrl');
+    const loading = document.getElementById('loading');
+    const errorDiv = document.getElementById('error');
+    const resultDiv = document.getElementById('result');
+
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const url = urlInput.value.trim();
+
+      loading.classList.remove('hidden');
+      errorDiv.classList.add('hidden');
+      resultDiv.classList.add('hidden');
+
+      try {
+        const response = await fetch(BACKEND_API, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ url })
+        });
+
+        const data = await response.json();
+        console.log("Response dari Backend:", data);
+
+        if (!response.ok || !data.success) {
+          throw new Error(data.message || 'Gagal mengambil data media.');
+        }
+
+        const resData = data.result || {};
+        
+        // Ambil Gambar
+        let thumb = resData.thumbnail || resData.cover || resData.image;
+        if (Array.isArray(thumb)) thumb = thumb[0];
+        document.getElementById('resThumb').src = thumb || 'https://via.placeholder.com/300';
+
+        // Ambil Judul
+        const title = resData.title || resData.desc || resData.caption || 'Media Downloader';
+        document.getElementById('resTitle').innerText = title;
+
+        const linksContainer = document.getElementById('downloadLinks');
+        linksContainer.innerHTML = '';
+
+        // Ekstraksi Link Download
+        let urls = [];
+        if (resData.url) urls.push(resData.url);
+        if (resData.urls) urls = urls.concat(resData.urls);
+        if (resData.video) urls = urls.concat(resData.video);
+        if (resData.download) urls = urls.concat(resData.download);
+
+        // Jika berbentuk objek (misal: { no_watermark: "http...", watermark: "http..." })
+        if (urls.length === 0 && typeof resData === 'object') {
+          for (const k in resData) {
+            if (typeof resData[k] === 'string' && resData[k].startsWith('http')) {
+              urls.push({ label: k, url: resData[k] });
+            }
+          }
+        }
+
+        if (urls.length > 0) {
+          urls.forEach((item, index) => {
+            const linkUrl = typeof item === 'string' ? item : (item.url || item.link);
+            const label = typeof item === 'object' && item.label ? item.label : `Download HD (${index + 1})`;
+
+            if (linkUrl && typeof linkUrl === 'string') {
+              const a = document.createElement('a');
+              a.href = linkUrl;
+              a.target = '_blank';
+              a.className = 'block text-center py-2 px-4 saweria-btn text-xs font-bold';
+              a.innerText = `⬇️ ${label.toUpperCase()}`;
+              linksContainer.appendChild(a);
+            }
+          });
+        }
+
+        if (linksContainer.children.length === 0) {
+          throw new Error("Objek data diterima, tetapi URL download tidak ditemukan dalam struktur respons.");
+        }
+
+        resultDiv.classList.remove('hidden');
+      } catch (err) {
+        console.error(err);
+        errorDiv.innerText = err.message || 'Terjadi kesalahan sistem.';
+        errorDiv.classList.remove('hidden');
+      } finally {
+        loading.classList.add('hidden');
+      }
+    });
+  </script>
+</body>
+</html>
